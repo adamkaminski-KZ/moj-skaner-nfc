@@ -1,24 +1,36 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Skaner Kodów</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 10px; background-color: #f4f4f4; color: #333; }
-      #container { max-width: 600px; margin: 0 auto; padding: 15px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-      #reader { width: 100%; border: 2px solid #eee; border-radius: 8px; margin: 10px auto; }
-      #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; }
-      button { font-size: 1em; padding: 12px; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
-      button:disabled { background-color: #ccc; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 10px; background-color: #f4f4f4; color: #333; }
+        #container { max-width: 600px; margin: 0 auto; padding: 15px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        #reader { width: 100%; border: 2px solid #eee; border-radius: 8px; margin: 10px auto; }
+        #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; }
+        button { font-size: 1em; padding: 12px; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 5px; }
+        button:disabled { background-color: #ccc; }
+        .controls { margin-top: 10px; text-align: center; }
+        .controls label { font-size: 0.9em; margin-right: 10px; }
+        .controls input[type="range"] { width: 60%; vertical-align: middle; }
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <div id="container">
-      <h2>Skaner Kodów Kreskowych (Wersja Ostateczna)</h2>
-      <div id="reader"></div>
-      <button id="restartButton" style="display: none;">Skanuj ponownie</button>
-      <div id="status">Gotowy...</div>
+        <h2>Skaner Kodów Kreskowych</h2>
+        <div id="reader"></div>
+
+        <div class="controls" id="cameraControls" style="display: none;">
+            <button id="torchButton" style="background-color: #6c757d;">Włącz Lampę</button>
+            <div style="margin-top: 10px;">
+                <label for="zoomSlider">Zoom:</label>
+                <input type="range" id="zoomSlider" min="1" max="10" step="0.1" value="1">
+            </div>
+        </div>
+
+        <button id="restartButton" style="display: none;">Skanuj ponownie</button>
+        <div id="status">Gotowy...</div>
     </div>
 
     <script>
@@ -26,83 +38,144 @@
     </script>
 
     <script>
-      // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ
-      const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
+    // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
 
-      const statusDiv = document.getElementById('status');
-      const restartButton = document.getElementById('restartButton');
-      let html5QrcodeScanner;
-      
-      // Uruchamiamy kod od razu, ponieważ mamy pewność,
-      // że biblioteka (powyżej) już się załadowała.
-      try {
+    const statusDiv = document.getElementById('status');
+    const restartButton = document.getElementById('restartButton');
+    const cameraControls = document.getElementById('cameraControls');
+    const zoomSlider = document.getElementById('zoomSlider');
+    const torchButton = document.getElementById('torchButton');
+    
+    let html5QrcodeScanner;
+    let currentTrack; // Zmienna do przechowywania ścieżki kamery
+
+    try {
         html5QrcodeScanner = new Html5Qrcode("reader");
-        startScanner(); // Uruchom skaner od razu
-
-        restartButton.addEventListener('click', () => {
-          startScanner(); // Uruchom ponownie po kliknięciu
-        });
-          
-      } catch (e) {
+        startScanner();
+        restartButton.addEventListener('click', startScanner);
+    } catch (e) {
         pokazStatus(`Błąd krytyczny: ${e.message}.`, true);
         console.error(e);
-      }
-      
-      // 
-      // Reszta funkcji pomocniczych
-      // 
+    }
 
-      function onScanSuccess(decodedText, decodedResult) {
+    // --- Reszta funkcji (bez zmian) ---
+
+    function onScanSuccess(decodedText, decodedResult) {
         pokazStatus(`Odczytano: ${decodedText}. Zapisywanie...`);
+        if (currentTrack) {
+            currentTrack.applyConstraints({ advanced: [{ torch: false }] });
+        }
         html5QrcodeScanner.stop().catch(err => console.warn(err));
         wyslijDaneDoGoogle(decodedText);
-      }
+    }
 
-      async function wyslijDaneDoGoogle(dane) {
+    async function wyslijDaneDoGoogle(dane) {
         try {
-          const response = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({ "dane": dane }),
-            headers: { 'Content-Type': 'application/json' },
-            mode: 'cors'
-          });
-          const result = await response.json();
-          if (result.status === 'sukces') {
-            pokazStatus("OK: Zapisano " + result.zapisano);
-          } else {
-            pokazStatus("Błąd serwera: " + result.wiadomosc, true);
-          }
+            const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({ "dane": dane }),
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors'
+            });
+            const result = await response.json();
+            if (result.status === 'sukces') {
+                pokazStatus("OK: Zapisano " + result.zapisano);
+            } else {
+                pokazStatus("Błąd serwera: " + result.wiadomosc, true);
+            }
         } catch (error) {
-          pokazStatus("Błąd sieci: " + error.message, true);
+            pokazStatus("Błąd sieci: " + error.message, true);
         } finally {
-          restartButton.style.display = 'block';
+            restartButton.style.display = 'block';
+            cameraControls.style.display = 'none';
         }
-      }
-      
-      function pokazStatus(wiadomosc, czyBlad = false) {
+    }
+
+    function pokazStatus(wiadomosc, czyBlad = false) {
         statusDiv.innerText = wiadomosc;
         statusDiv.style.color = czyBlad ? 'red' : 'black';
         statusDiv.style.backgroundColor = czyBlad ? '#f8d7da' : '#e9ecef';
-      }
+    }
 
-      function startScanner() {
+    // --- ZMODYFIKOWANA FUNKCJA startScanner ---
+
+    function startScanner() {
         pokazStatus("Uruchamianie kamery...");
         restartButton.style.display = 'none';
+        cameraControls.style.display = 'none';
+        let isTorchOn = false;
 
-        html5QrcodeScanner.start(
-          { facingMode: "environment" }, // Tylna kamera
-          {
+        const config = {
             fps: 10,
             qrbox: { width: 250, height: 250 }
-          },
-          onScanSuccess,
-          (errorMessage) => { /* ignorujemy błędy */ }
-        ).catch((err) => {
-          let errorName = (typeof err === 'string') ? err : (err.name || "UnknownError");
-          pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia.`, true);
-          console.error("Błąd startu kamery:", err);
+        };
+
+        html5QrcodeScanner.start(
+            { facingMode: "environment" }, 
+            config,
+            onScanSuccess,
+            (errorMessage) => { /* ignorujemy błędy */ }
+        )
+        .then(() => {
+            // Sukces! Mamy dostęp do kamery.
+            pokazStatus("Kamera aktywna. Próbuję ustawić ostrość...");
+            cameraControls.style.display = 'block';
+
+            const videoElement = document.getElementById("reader__video_element");
+            if (videoElement) {
+                const stream = videoElement.srcObject;
+                currentTrack = stream.getVideoTracks()[0];
+                
+                const capabilities = currentTrack.getCapabilities();
+
+                // --- NOWY BLOK KODU: WYMUSZENIE AUTOFOKUSA ---
+                if (capabilities.focusMode) {
+                    currentTrack.applyConstraints({
+                        advanced: [{ focusMode: "continuous" }]
+                    })
+                    .then(() => {
+                        pokazStatus("Kamera aktywna. Autofokus włączony.");
+                    })
+                    .catch((e) => {
+                        console.warn("Nie udało się włączyć ciągłego autofokusa: ", e);
+                        pokazStatus("Kamera aktywna. (Autofokus manualny)");
+                    });
+                }
+                // --- KONIEC NOWEGO BLOKU ---
+
+                // Ustaw suwak zoomu
+                if (capabilities.zoom) {
+                    zoomSlider.min = capabilities.zoom.min;
+                    zoomSlider.max = capabilities.zoom.max;
+                    zoomSlider.step = capabilities.zoom.step;
+                    zoomSlider.value = 1;
+                    zoomSlider.oninput = () => {
+                        currentTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+                    };
+                } else {
+                    zoomSlider.style.display = 'none'; 
+                }
+
+                // Ustaw przycisk lampy
+                if (capabilities.torch) {
+                    torchButton.onclick = () => {
+                        isTorchOn = !isTorchOn;
+                        currentTrack.applyConstraints({ advanced: [{ torch: isTorchOn }] });
+                        torchButton.innerText = isTorchOn ? "Wyłącz Lampę" : "Włącz Lampę";
+                        torchButton.style.backgroundColor = isTorchOn ? "#007bff" : "#6c757d";
+                    };
+                } else {
+                    torchButton.style.display = 'none'; 
+                }
+            }
+        })
+        .catch((err) => {
+            let errorName = (typeof err === 'string') ? err : (err.name || "UnknownError");
+            pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia.`, true);
+            console.error("Błąd startu kamery:", err);
         });
-      }
+    }
     </script>
-  </body>
+</body>
 </html>
