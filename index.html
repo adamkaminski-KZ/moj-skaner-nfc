@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Skaner NFC</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 20px; background-color: #f4f4f4; color: #333; }
+      #container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+      button { font-size: 1.1em; padding: 15px; width: 100%; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      button:disabled { background-color: #ccc; }
+      #status { margin-top: 20px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; background-color: #e9ecef; }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <h2>Skaner Tagów NFC</h2>
+      <p>Naciśnij przycisk i zbliż tag NFC do czytnika.</p>
+      
+      <button id="scanButton">Skanuj Tag</button>
+      
+      <div id="status">Gotowy...</div>
+    </div>
+
+    <script>
+      // 
+      // !!! WAŻNE !!!
+      // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ z Kroku 2
+      // 
+      const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
+
+
+      const scanButton = document.getElementById("scanButton");
+      const statusDiv = document.getElementById("status");
+
+      scanButton.addEventListener("click", skanujTagNFC);
+
+      async function skanujTagNFC() {
+        if (!('NDEFReader' in window)) {
+          pokazStatus("BŁĄD: Twoja przeglądarka nie obsługuje Web NFC.", true);
+          return;
+        }
+
+        scanButton.disabled = true;
+
+        try {
+          const ndef = new NDEFReader();
+          await ndef.scan();
+          pokazStatus("Skanowanie aktywne... Zbliż tag.");
+
+          ndef.onreading = (event) => {
+            const message = event.message;
+            if (!message.records || message.records.length === 0) {
+              pokazStatus("Błąd: Tag jest pusty lub nieczytelny.", true);
+              return;
+            }
+
+            const firstRecord = message.records[0];
+            const textDecoder = new TextDecoder(firstRecord.encoding);
+            const daneZTagu = textDecoder.decode(firstRecord.data);
+
+            pokazStatus(`Odczytano: ${daneZTagu}. Wysyłanie do Arkusza...`);
+            wyslijDaneDoGoogle(daneZTagu);
+          };
+
+        } catch (error) {
+          pokazStatus("Błąd skanowania: " + error.message, true);
+          scanButton.disabled = false;
+        }
+      }
+
+      async function wyslijDaneDoGoogle(dane) {
+        try {
+          const response = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({ "dane": dane }), // Pakujemy dane w obiekt JSON
+            headers: { 'Content-Type': 'application/json' },
+            mode: 'cors' // Wymagane do komunikacji między domenami
+          });
+
+          const result = await response.json();
+
+          if (result.status === 'sukces') {
+            pokazStatus("OK: Zapisano " + result.zapisano);
+          } else {
+            pokazStatus("Błąd serwera: " + result.wiadomosc, true);
+          }
+          
+        } catch (error) {
+          pokazStatus("Błąd sieci: " + error.message, true);
+        } finally {
+          scanButton.disabled = false; // Uaktywnij przycisk ponownie
+        }
+      }
+      
+      function pokazStatus(wiadomosc, czyBlad = false) {
+        statusDiv.innerText = wiadomosc;
+        statusDiv.style.color = czyBlad ? 'red' : 'black';
+        statusDiv.style.backgroundColor = czyBlad ? '#f8d7da' : '#e9ecef';
+      }
+    </script>
+  </body>
+</html>
