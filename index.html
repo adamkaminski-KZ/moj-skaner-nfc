@@ -11,23 +11,13 @@
         #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; }
         button { font-size: 1em; padding: 12px; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 5px; }
         button:disabled { background-color: #ccc; }
-        .controls { margin-top: 10px; text-align: center; }
-        .controls label { font-size: 0.9em; margin-right: 10px; }
-        .controls input[type="range"] { width: 60%; vertical-align: middle; }
     </style>
 </head>
 <body>
     <div id="container">
         <h2>Skaner Kodów Kreskowych</h2>
+        
         <div id="reader"></div>
-
-        <div class="controls" id="cameraControls" style="display: none;">
-            <button id="torchButton" style="background-color: #6c757d;">Włącz Lampę</button>
-            <div style="margin-top: 10px;">
-                <label for="zoomSlider">Zoom:</label>
-                <input type="range" id="zoomSlider" min="1" max="10" step="0.1" value="1">
-            </div>
-        </div>
 
         <button id="restartButton" style="display: none;">Skanuj ponownie</button>
         <div id="status">Gotowy...</div>
@@ -43,12 +33,7 @@
 
     const statusDiv = document.getElementById('status');
     const restartButton = document.getElementById('restartButton');
-    const cameraControls = document.getElementById('cameraControls');
-    const zoomSlider = document.getElementById('zoomSlider');
-    const torchButton = document.getElementById('torchButton');
-    
     let html5QrcodeScanner;
-    let currentTrack; // Zmienna do przechowywania ścieżki kamery
 
     try {
         html5QrcodeScanner = new Html5Qrcode("reader");
@@ -59,13 +44,11 @@
         console.error(e);
     }
 
-    // --- Reszta funkcji (bez zmian) ---
+    // --- Funkcje pomocnicze ---
 
     function onScanSuccess(decodedText, decodedResult) {
         pokazStatus(`Odczytano: ${decodedText}. Zapisywanie...`);
-        if (currentTrack) {
-            currentTrack.applyConstraints({ advanced: [{ torch: false }] });
-        }
+        // Usunięto kod lampy
         html5QrcodeScanner.stop().catch(err => console.warn(err));
         wyslijDaneDoGoogle(decodedText);
     }
@@ -88,7 +71,7 @@
             pokazStatus("Błąd sieci: " + error.message, true);
         } finally {
             restartButton.style.display = 'block';
-            cameraControls.style.display = 'none';
+            // Usunięto kod kontrolek
         }
     }
 
@@ -101,10 +84,17 @@
     // --- ZMODYFIKOWANA FUNKCJA startScanner ---
 
     function startScanner() {
-        pokazStatus("Uruchamianie kamery...");
+        pokazStatus("Uruchamianie kamery (z prośbą o autofokus)...");
         restartButton.style.display = 'none';
-        cameraControls.style.display = 'none';
-        let isTorchOn = false;
+
+        // --- NOWA KONFIGURACJA KAMERY ---
+        // Zamiast prostego obiektu, tworzymy zaawansowane żądanie
+        const constraints = {
+            facingMode: "environment", // Chcemy tylną kamerę
+            advanced: [
+                { focusMode: "continuous" } // I chcemy, aby miała ciągły autofokus
+            ]
+        };
 
         const config = {
             fps: 10,
@@ -112,68 +102,26 @@
         };
 
         html5QrcodeScanner.start(
-            { facingMode: "environment" }, 
+            constraints, // Używamy naszego nowego, zaawansowanego żądania
             config,
             onScanSuccess,
-            (errorMessage) => { /* ignorujemy błędy */ }
+            (errorMessage) => { /* ignorujemy błędy klatek */ }
         )
         .then(() => {
-            // Sukces! Mamy dostęp do kamery.
-            pokazStatus("Kamera aktywna. Próbuję ustawić ostrość...");
-            cameraControls.style.display = 'block';
-
-            const videoElement = document.getElementById("reader__video_element");
-            if (videoElement) {
-                const stream = videoElement.srcObject;
-                currentTrack = stream.getVideoTracks()[0];
-                
-                const capabilities = currentTrack.getCapabilities();
-
-                // --- NOWY BLOK KODU: WYMUSZENIE AUTOFOKUSA ---
-                if (capabilities.focusMode) {
-                    currentTrack.applyConstraints({
-                        advanced: [{ focusMode: "continuous" }]
-                    })
-                    .then(() => {
-                        pokazStatus("Kamera aktywna. Autofokus włączony.");
-                    })
-                    .catch((e) => {
-                        console.warn("Nie udało się włączyć ciągłego autofokusa: ", e);
-                        pokazStatus("Kamera aktywna. (Autofokus manualny)");
-                    });
-                }
-                // --- KONIEC NOWEGO BLOKU ---
-
-                // Ustaw suwak zoomu
-                if (capabilities.zoom) {
-                    zoomSlider.min = capabilities.zoom.min;
-                    zoomSlider.max = capabilities.zoom.max;
-                    zoomSlider.step = capabilities.zoom.step;
-                    zoomSlider.value = 1;
-                    zoomSlider.oninput = () => {
-                        currentTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
-                    };
-                } else {
-                    zoomSlider.style.display = 'none'; 
-                }
-
-                // Ustaw przycisk lampy
-                if (capabilities.torch) {
-                    torchButton.onclick = () => {
-                        isTorchOn = !isTorchOn;
-                        currentTrack.applyConstraints({ advanced: [{ torch: isTorchOn }] });
-                        torchButton.innerText = isTorchOn ? "Wyłącz Lampę" : "Włącz Lampę";
-                        torchButton.style.backgroundColor = isTorchOn ? "#007bff" : "#6c757d";
-                    };
-                } else {
-                    torchButton.style.display = 'none'; 
-                }
-            }
+            // Sukces! Mamy kamerę.
+            pokazStatus("Kamera aktywna. Autofokus powinien działać.");
         })
         .catch((err) => {
-            let errorName = (typeof err === 'string') ? err : (err.name || "UnknownError");
-            pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia.`, true);
+            // Ta sekcja jest teraz kluczowa!
+            let errorName = err.name || "UnknownError";
             console.error("Błąd startu kamery:", err);
+            
+            // Jeśli telefon nie ma kamery z autofokusem, tu się o tym dowiemy
+            if (errorName === "OverconstrainedError") {
+                pokazStatus(`BŁĄD: Telefon nie wspiera ciągłego autofokusa.`, true);
+            } else {
+                pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia.`, true);
+            }
         });
     }
     </script>
