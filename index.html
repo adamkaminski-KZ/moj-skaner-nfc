@@ -3,83 +3,75 @@
   <head>
     <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Skaner NFC</title>
+    <title>Skaner Kodów</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 20px; background-color: #f4f4f4; color: #333; }
-      #container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-      button { font-size: 1.1em; padding: 15px; width: 100%; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 10px; background-color: #f4f4f4; color: #333; }
+      #container { max-width: 600px; margin: 0 auto; padding: 15px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+      /* Ten element 'reader' będzie zawierał wideo z kamery */
+      #reader {
+        width: 100%;
+        border: 2px solid #eee;
+        border-radius: 8px;
+        margin: 10px auto;
+      }
+      #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; }
+      button { font-size: 1em; padding: 12px; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
       button:disabled { background-color: #ccc; }
-      #status { margin-top: 20px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; background-color: #e9ecef; }
     </style>
   </head>
   <body>
     <div id="container">
-      <h2>Skaner Tagów NFC</h2>
-      <p>Naciśnij przycisk i zbliż tag NFC do czytnika.</p>
+      <h2>Skaner Kodów Kreskowych</h2>
       
-      <button id="scanButton">Skanuj Tag</button>
+      <div id="reader"></div>
       
-      <div id="status">Gotowy...</div>
+      <button id="restartButton" style="display: none;">Skanuj ponownie</button>
+      
+      <div id="status">Uruchamianie kamery...</div>
     </div>
+
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
 
     <script>
       // 
       // !!! WAŻNE !!!
-      // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ z Kroku 2
+      // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ z Kroku 1
       // 
-      const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
+      const APPS_SCRIPT_URL = "https://script.google.com/macros/s/TWOJ_ADRES_URL_WDROZENIA/exec";
 
+      const statusDiv = document.getElementById('status');
+      const restartButton = document.getElementById('restartButton');
+      let html5QrcodeScanner;
 
-      const scanButton = document.getElementById("scanButton");
-      const statusDiv = document.getElementById("status");
+      /**
+       * Funkcja wywoływana po pomyślnym zeskanowaniu kodu
+       */
+      function onScanSuccess(decodedText, decodedResult) {
+        pokazStatus(`Odczytano: ${decodedText}. Zapisywanie...`);
+        
+        // Zatrzymaj kamerę po sukcesie
+        html5QrcodeScanner.stop().catch(err => {
+            console.warn("Błąd zatrzymania kamery:", err);
+        });
 
-      scanButton.addEventListener("click", skanujTagNFC);
-
-      async function skanujTagNFC() {
-        if (!('NDEFReader' in window)) {
-          pokazStatus("BŁĄD: Twoja przeglądarka nie obsługuje Web NFC.", true);
-          return;
-        }
-
-        scanButton.disabled = true;
-
-        try {
-          const ndef = new NDEFReader();
-          await ndef.scan();
-          pokazStatus("Skanowanie aktywne... Zbliż tag.");
-
-          ndef.onreading = (event) => {
-            const message = event.message;
-            if (!message.records || message.records.length === 0) {
-              pokazStatus("Błąd: Tag jest pusty lub nieczytelny.", true);
-              return;
-            }
-
-            const firstRecord = message.records[0];
-            const textDecoder = new TextDecoder(firstRecord.encoding);
-            const daneZTagu = textDecoder.decode(firstRecord.data);
-
-            pokazStatus(`Odczytano: ${daneZTagu}. Wysyłanie do Arkusza...`);
-            wyslijDaneDoGoogle(daneZTagu);
-          };
-
-        } catch (error) {
-          pokazStatus("Błąd skanowania: " + error.message, true);
-          scanButton.disabled = false;
-        }
+        // Wyślij dane do Google używając fetch
+        wyslijDaneDoGoogle(decodedText);
       }
 
+      /**
+       * Funkcja do wysyłania danych do Google Apps Script
+       */
       async function wyslijDaneDoGoogle(dane) {
         try {
           const response = await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify({ "dane": dane }), // Pakujemy dane w obiekt JSON
+            body: JSON.stringify({ "dane": dane }), // Pakujemy dane w JSON
             headers: { 'Content-Type': 'application/json' },
-            mode: 'cors' // Wymagane do komunikacji między domenami
+            mode: 'cors'
           });
-
+          
           const result = await response.json();
-
+          
           if (result.status === 'sukces') {
             pokazStatus("OK: Zapisano " + result.zapisano);
           } else {
@@ -89,15 +81,53 @@
         } catch (error) {
           pokazStatus("Błąd sieci: " + error.message, true);
         } finally {
-          scanButton.disabled = false; // Uaktywnij przycisk ponownie
+          // Pokaż przycisk do ponownego skanowania
+          restartButton.style.display = 'block';
         }
       }
       
+      /**
+       * Funkcja pomocnicza do pokazywania statusu
+       */
       function pokazStatus(wiadomosc, czyBlad = false) {
         statusDiv.innerText = wiadomosc;
         statusDiv.style.color = czyBlad ? 'red' : 'black';
         statusDiv.style.backgroundColor = czyBlad ? '#f8d7da' : '#e9ecef';
       }
+
+      /**
+       * Funkcja startująca skaner
+       */
+      function startScanner() {
+        pokazStatus("Uruchamianie kamery...");
+        restartButton.style.display = 'none'; // Ukryj przycisk
+
+        // Konfiguracja skanera
+        html5QrcodeScanner.start(
+          { facingMode: "environment" }, // Użyj tylnej kamery
+          {
+            fps: 10, // Klatki na sekundę
+            qrbox: { width: 250, height: 250 } // Rozmiar okna skanowania
+          },
+          onScanSuccess, // Funkcja po sukcesie
+          (errorMessage) => { 
+            // błędy podczas skanowania (np. brak kodu) - ignorujemy
+          }
+        ).catch((err) => {
+          pokazStatus(`Błąd startu kamery: ${err}. Sprawdź uprawnienia.`, true);
+        });
+      }
+      
+      // Główna logika: Uruchom skaner po załadowaniu strony
+      document.addEventListener("DOMContentLoaded", () => {
+        html5QrcodeScanner = new Html5Qrcode("reader"); // "reader" to ID naszego div-a
+        startScanner();
+
+        // Uruchom skaner ponownie po kliknięciu przycisku
+        restartButton.addEventListener('click', () => {
+          startScanner();
+        });
+      });
     </script>
   </body>
 </html>
