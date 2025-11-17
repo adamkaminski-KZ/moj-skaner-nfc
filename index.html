@@ -7,13 +7,7 @@
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 10px; background-color: #f4f4f4; color: #333; }
       #container { max-width: 600px; margin: 0 auto; padding: 15px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-      /* Ten element 'reader' będzie zawierał wideo z kamery */
-      #reader {
-        width: 100%;
-        border: 2px solid #eee;
-        border-radius: 8px;
-        margin: 10px auto;
-      }
+      #reader { width: 100%; border: 2px solid #eee; border-radius: 8px; margin: 10px auto; }
       #status { margin-top: 15px; font-weight: bold; text-align: center; padding: 10px; border-radius: 5px; }
       button { font-size: 1em; padding: 12px; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
       button:disabled { background-color: #ccc; }
@@ -21,74 +15,49 @@
   </head>
   <body>
     <div id="container">
-      <h2>Skaner Kodów Kreskowych</h2>
-      
+      <h2>Skaner Kodów Kreskowych (Test 2)</h2>
       <div id="reader"></div>
-      
       <button id="restartButton" style="display: none;">Skanuj ponownie</button>
-      
-      <div id="status">Uruchamianie kamery...</div>
+      <div id="status">Gotowy...</div>
     </div>
 
     <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
 
     <script>
-      // 
-      // !!! WAŻNE !!!
-      // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ z Kroku 1
-      // 
+      // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ
       const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
 
       const statusDiv = document.getElementById('status');
       const restartButton = document.getElementById('restartButton');
       let html5QrcodeScanner;
 
-      /**
-       * Funkcja wywoływana po pomyślnym zeskanowaniu kodu
-       */
       function onScanSuccess(decodedText, decodedResult) {
         pokazStatus(`Odczytano: ${decodedText}. Zapisywanie...`);
-        
-        // Zatrzymaj kamerę po sukcesie
-        html5QrcodeScanner.stop().catch(err => {
-            console.warn("Błąd zatrzymania kamery:", err);
-        });
-
-        // Wyślij dane do Google używając fetch
+        html5QrcodeScanner.stop().catch(err => console.warn(err));
         wyslijDaneDoGoogle(decodedText);
       }
 
-      /**
-       * Funkcja do wysyłania danych do Google Apps Script
-       */
       async function wyslijDaneDoGoogle(dane) {
         try {
           const response = await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify({ "dane": dane }), // Pakujemy dane w JSON
+            body: JSON.stringify({ "dane": dane }),
             headers: { 'Content-Type': 'application/json' },
             mode: 'cors'
           });
-          
           const result = await response.json();
-          
           if (result.status === 'sukces') {
             pokazStatus("OK: Zapisano " + result.zapisano);
           } else {
             pokazStatus("Błąd serwera: " + result.wiadomosc, true);
           }
-          
         } catch (error) {
           pokazStatus("Błąd sieci: " + error.message, true);
         } finally {
-          // Pokaż przycisk do ponownego skanowania
           restartButton.style.display = 'block';
         }
       }
       
-      /**
-       * Funkcja pomocnicza do pokazywania statusu
-       */
       function pokazStatus(wiadomosc, czyBlad = false) {
         statusDiv.innerText = wiadomosc;
         statusDiv.style.color = czyBlad ? 'red' : 'black';
@@ -96,37 +65,48 @@
       }
 
       /**
+       * --- ZMODYFIKOWANA FUNKCJA ---
        * Funkcja startująca skaner
        */
       function startScanner() {
-        pokazStatus("Uruchamianie kamery...");
-        restartButton.style.display = 'none'; // Ukryj przycisk
+        pokazStatus("Uruchamianie kamery (tryb domyślny)...");
+        restartButton.style.display = 'none';
 
-        // Konfiguracja skanera
+        // --- ZMIANA ---
+        // Usunęliśmy żądanie { facingMode: "environment" }
+        // Teraz prosimy o domyślną kamerę (prawdopodobnie przednią).
+        // Testujemy, czy okno pozwolenia w ogóle się pojawi.
         html5QrcodeScanner.start(
-          { facingMode: "environment" }, // Użyj tylnej kamery
+          { }, // Pusty obiekt = użyj domyślnych ustawień kamery
           {
-            fps: 10, // Klatki na sekundę
-            qrbox: { width: 250, height: 250 } // Rozmiar okna skanowania
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
           },
           onScanSuccess, // Funkcja po sukcesie
-          (errorMessage) => { 
-            // błędy podczas skanowania (np. brak kodu) - ignorujemy
-          }
+          (errorMessage) => { /* ignorujemy błędy skanowania */ }
         ).catch((err) => {
-          pokazStatus(`Błąd startu kamery: ${err}. Sprawdź uprawnienia.`, true);
+          // Dodano lepsze raportowanie błędów
+          let errorName = (typeof err === 'string') ? err : (err.name || "UnknownError");
+          let errorMsg = (typeof err === 'string') ? "" : (err.message || "No message");
+          
+          console.error("Błąd startu kamery:", err);
+          pokazStatus(`BŁĄD: ${errorName}. ${errorMsg}. Czy urządzenie ma kamerę?`, true);
         });
       }
       
-      // Główna logika: Uruchom skaner po załadowaniu strony
+      // Główna logika
       document.addEventListener("DOMContentLoaded", () => {
-        html5QrcodeScanner = new Html5Qrcode("reader"); // "reader" to ID naszego div-a
-        startScanner();
+        try {
+            html5QrcodeScanner = new Html5Qrcode("reader");
+            startScanner(); // Uruchom skaner od razu
 
-        // Uruchom skaner ponownie po kliknięciu przycisku
-        restartButton.addEventListener('click', () => {
-          startScanner();
-        });
+            restartButton.addEventListener('click', () => {
+              startScanner(); // Uruchom ponownie po kliknięciu
+            });
+        } catch (e) {
+            pokazStatus(`Błąd krytyczny: ${e.message}. Biblioteka skanera nie mogła się uruchomić.`, true);
+            console.error(e);
+        }
       });
     </script>
   </body>
