@@ -15,21 +15,51 @@
   </head>
   <body>
     <div id="container">
-      <h2>Skaner Kodów Kreskowych (Test 2)</h2>
+      <h2>Skaner Kodów Kreskowych (Test 3)</h2>
       <div id="reader"></div>
       <button id="restartButton" style="display: none;">Skanuj ponownie</button>
-      <div id="status">Gotowy...</div>
+      <div id="status">Pobieranie biblioteki skanera...</div>
     </div>
 
-    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <script 
+      src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js" 
+      onload="initializeApp()">
+    </script>
 
     <script>
       // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ
       const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
 
+      // Zmienne globalne, aby były widoczne dla wszystkich funkcji
       const statusDiv = document.getElementById('status');
       const restartButton = document.getElementById('restartButton');
       let html5QrcodeScanner;
+
+      /**
+       * KROK 2: ZMIANA
+       * Ta funkcja jest teraz wywoływana przez atrybut 'onload' powyżej.
+       * Zawiera całą logikę, która wcześniej była w "DOMContentLoaded".
+       */
+      function initializeApp() {
+        pokazStatus("Gotowy. Uruchamiam skaner...");
+        
+        try {
+          html5QrcodeScanner = new Html5Qrcode("reader");
+          startScanner(); // Uruchom skaner od razu
+
+          restartButton.addEventListener('click', () => {
+            startScanner(); // Uruchom ponownie po kliknięciu
+          });
+            
+        } catch (e) {
+          pokazStatus(`Błąd krytyczny: ${e.message}.`, true);
+          console.error(e);
+        }
+      }
+
+      // 
+      // Reszta funkcji pomocniczych pozostaje bez zmian
+      // 
 
       function onScanSuccess(decodedText, decodedResult) {
         pokazStatus(`Odczytano: ${decodedText}. Zapisywanie...`);
@@ -64,50 +94,31 @@
         statusDiv.style.backgroundColor = czyBlad ? '#f8d7da' : '#e9ecef';
       }
 
-      /**
-       * --- ZMODYFIKOWANA FUNKCJA ---
-       * Funkcja startująca skaner
-       */
       function startScanner() {
-        pokazStatus("Uruchamianie kamery (tryb domyślny)...");
+        pokazStatus("Uruchamianie kamery...");
         restartButton.style.display = 'none';
 
-        // --- ZMIANA ---
-        // Usunęliśmy żądanie { facingMode: "environment" }
-        // Teraz prosimy o domyślną kamerę (prawdopodobnie przednią).
-        // Testujemy, czy okno pozwolenia w ogóle się pojawi.
+        // Używamy z powrotem trybu 'environment' (tylna kamera),
+        // ponieważ teraz wiemy, że problemem nie była kamera, lecz ładowanie.
         html5QrcodeScanner.start(
-          { }, // Pusty obiekt = użyj domyślnych ustawień kamery
+          { facingMode: "environment" },
           {
             fps: 10,
             qrbox: { width: 250, height: 250 }
           },
-          onScanSuccess, // Funkcja po sukcesie
+          onScanSuccess,
           (errorMessage) => { /* ignorujemy błędy skanowania */ }
         ).catch((err) => {
-          // Dodano lepsze raportowanie błędów
           let errorName = (typeof err === 'string') ? err : (err.name || "UnknownError");
-          let errorMsg = (typeof err === 'string') ? "" : (err.message || "No message");
-          
+          pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia kamery.`, true);
           console.error("Błąd startu kamery:", err);
-          pokazStatus(`BŁĄD: ${errorName}. ${errorMsg}. Czy urządzenie ma kamerę?`, true);
         });
       }
       
-      // Główna logika
-      document.addEventListener("DOMContentLoaded", () => {
-        try {
-            html5QrcodeScanner = new Html5Qrcode("reader");
-            startScanner(); // Uruchom skaner od razu
+      // KROK 3: ZMIANA
+      // Usunęliśmy 'DOMContentLoaded', ponieważ teraz 'onload' steruje aplikacją
+      // document.addEventListener("DOMContentLoaded", ...); 
 
-            restartButton.addEventListener('click', () => {
-              startScanner(); // Uruchom ponownie po kliknięciu
-            });
-        } catch (e) {
-            pokazStatus(`Błąd krytyczny: ${e.message}. Biblioteka skanera nie mogła się uruchomić.`, true);
-            console.error(e);
-        }
-      });
     </script>
   </body>
 </html>
