@@ -15,30 +15,28 @@
   </head>
   <body>
     <div id="container">
-      <h2>Skaner Kodów Kreskowych (Test 3)</h2>
+      <h2>Skaner Kodów Kreskowych (Test 5)</h2>
       <div id="reader"></div>
       <button id="restartButton" style="display: none;">Skanuj ponownie</button>
       <div id="status">Pobieranie biblioteki skanera...</div>
     </div>
 
     <script 
-  src="https://cdn.jsdelivr.net/npm/html5-qrcode@latest/dist/html5-qrcode.min.js" 
-  onload="initializeApp()">
-</script>
+      src="https://cdn.jsdelivr.net/npm/html5-qrcode@latest/dist/html5-qrcode.min.js" 
+      onload="initializeApp()">
+    </script>
 
     <script>
       // Wklej tutaj swój ADRES URL APLIKACJI INTERNETOWEJ
       const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmEzbBhz9Gnivx00GQwDeoX6cDzLSh2SGagimqYYg8BUPbiuqUsHJmoZRLnef8oG2HiA/exec";
 
-      // Zmienne globalne, aby były widoczne dla wszystkich funkcji
+      // Zmienne globalne
       const statusDiv = document.getElementById('status');
       const restartButton = document.getElementById('restartButton');
       let html5QrcodeScanner;
 
       /**
-       * KROK 2: ZMIANA
-       * Ta funkcja jest teraz wywoływana przez atrybut 'onload' powyżej.
-       * Zawiera całą logikę, która wcześniej była w "DOMContentLoaded".
+       * Ta funkcja jest wywoływana przez 'onload' z tagu <script> powyżej
        */
       function initializeApp() {
         pokazStatus("Gotowy. Uruchamiam skaner...");
@@ -58,7 +56,7 @@
       }
 
       // 
-      // Reszta funkcji pomocniczych pozostaje bez zmian
+      // Reszta funkcji pomocniczych
       // 
 
       function onScanSuccess(decodedText, decodedResult) {
@@ -98,10 +96,8 @@
         pokazStatus("Uruchamianie kamery...");
         restartButton.style.display = 'none';
 
-        // Używamy z powrotem trybu 'environment' (tylna kamera),
-        // ponieważ teraz wiemy, że problemem nie była kamera, lecz ładowanie.
         html5QrcodeScanner.start(
-          { facingMode: "environment" },
+          { facingMode: "environment" }, // Tylna kamera
           {
             fps: 10,
             qrbox: { width: 250, height: 250 }
@@ -110,15 +106,10 @@
           (errorMessage) => { /* ignorujemy błędy skanowania */ }
         ).catch((err) => {
           let errorName = (typeof err === 'string') ? err : (err.name || "UnknownError");
-          pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia kamery.`, true);
+          pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia.`, true);
           console.error("Błąd startu kamery:", err);
         });
       }
-      
-      // KROK 3: ZMIANA
-      // Usunęliśmy 'DOMContentLoaded', ponieważ teraz 'onload' steruje aplikacją
-      // document.addEventListener("DOMContentLoaded", ...); 
-
     </script>
   </body>
 </html>
