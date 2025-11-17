@@ -15,7 +15,7 @@
   </head>
   <body>
     <div id="container">
-      <h2>Skaner Kodów Kreskowych (Test 5)</h2>
+      <h2>Skaner Kodów Kreskowych (Test 6)</h2>
       <div id="reader"></div>
       <button id="restartButton" style="display: none;">Skanuj ponownie</button>
       <div id="status">Pobieranie biblioteki skanera...</div>
@@ -36,9 +36,11 @@
       let html5QrcodeScanner;
 
       /**
-       * Ta funkcja jest wywoływana przez 'onload' z tagu <script> powyżej
+       * KROK 3: KLUCZOWA POPRAWKA
+       * Przypisujemy funkcję do 'window.initializeApp', 
+       * aby była globalnie dostępna dla atrybutu 'onload'.
        */
-      function initializeApp() {
+      window.initializeApp = function() {
         pokazStatus("Gotowy. Uruchamiam skaner...");
         
         try {
@@ -56,7 +58,7 @@
       }
 
       // 
-      // Reszta funkcji pomocniczych
+      // Reszta funkcji pomocniczych (bez zmian)
       // 
 
       function onScanSuccess(decodedText, decodedResult) {
