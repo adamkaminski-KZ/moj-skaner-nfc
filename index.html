@@ -15,10 +15,8 @@
 </head>
 <body>
     <div id="container">
-        <h2>Skaner Kodów Kreskowych</h2>
-        
+        <h2>Skaner Kodów Kreskowych (Test 8)</h2>
         <div id="reader"></div>
-
         <button id="restartButton" style="display: none;">Skanuj ponownie</button>
         <div id="status">Gotowy...</div>
     </div>
@@ -44,11 +42,10 @@
         console.error(e);
     }
 
-    // --- Funkcje pomocnicze ---
+    // --- Funkcje pomocnicze (bez zmian) ---
 
     function onScanSuccess(decodedText, decodedResult) {
         pokazStatus(`Odczytano: ${decodedText}. Zapisywanie...`);
-        // Usunięto kod lampy
         html5QrcodeScanner.stop().catch(err => console.warn(err));
         wyslijDaneDoGoogle(decodedText);
     }
@@ -71,7 +68,6 @@
             pokazStatus("Błąd sieci: " + error.message, true);
         } finally {
             restartButton.style.display = 'block';
-            // Usunięto kod kontrolek
         }
     }
 
@@ -84,43 +80,70 @@
     // --- ZMODYFIKOWANA FUNKCJA startScanner ---
 
     function startScanner() {
-        pokazStatus("Uruchamianie kamery (z prośbą o autofokus)...");
+        pokazStatus("Uruchamianie kamery...");
         restartButton.style.display = 'none';
 
-        // --- NOWA KONFIGURACJA KAMERY ---
-        // Zamiast prostego obiektu, tworzymy zaawansowane żądanie
-        const constraints = {
-            facingMode: "environment", // Chcemy tylną kamerę
-            advanced: [
-                { focusMode: "continuous" } // I chcemy, aby miała ciągły autofokus
-            ]
-        };
-
+        // Konfiguracja okna skanowania
         const config = {
             fps: 10,
             qrbox: { width: 250, height: 250 }
         };
 
+        // KROK 1: Uruchom kamerę w prosty sposób
         html5QrcodeScanner.start(
-            constraints, // Używamy naszego nowego, zaawansowanego żądania
+            { facingMode: "environment" }, // Prosty obiekt z 1 kluczem
             config,
             onScanSuccess,
             (errorMessage) => { /* ignorujemy błędy klatek */ }
         )
         .then(() => {
-            // Sukces! Mamy kamerę.
-            pokazStatus("Kamera aktywna. Autofokus powinien działać.");
+            // KROK 2: Kamera działa. Teraz próbujemy włączyć autofokus.
+            pokazStatus("Kamera aktywna. Próbuję włączyć autofokus...");
+            
+            // Musimy pobrać "ścieżkę" (track) kamery, aby nią sterować
+            const videoElement = document.getElementById("reader__video_element");
+            if (!videoElement || !videoElement.srcObject) {
+                 pokazStatus("Kamera aktywna (Nie można pobrać ścieżki wideo).");
+                 return;
+            }
+            
+            const stream = videoElement.srcObject;
+            const currentTrack = stream.getVideoTracks()[0];
+            
+            if (!currentTrack) {
+                 pokazStatus("Kamera aktywna (Nie można pobrać ścieżki wideo).");
+                 return;
+            }
+
+            const capabilities = currentTrack.getCapabilities();
+
+            // Sprawdź, czy telefon w ogóle wspiera zmianę trybu ostrości
+            if (capabilities.focusMode) {
+                currentTrack.applyConstraints({
+                    advanced: [{ focusMode: "continuous" }]
+                })
+                .then(() => {
+                    pokazStatus("Kamera aktywna. Autofokus włączony.");
+                })
+                .catch((e) => {
+                    console.warn("Nie udało się włączyć ciągłego autofokusa: ", e);
+                    pokazStatus("Kamera aktywna. (Autofokus niedostępny)");
+                });
+            } else {
+                pokazStatus("Kamera aktywna. (Telefon nie wspiera autofokusa)");
+            }
         })
         .catch((err) => {
-            // Ta sekcja jest teraz kluczowa!
+            // Obsługa błędów, jeśli kamera w ogóle się nie uruchomi
             let errorName = err.name || "UnknownError";
             console.error("Błąd startu kamery:", err);
             
-            // Jeśli telefon nie ma kamery z autofokusem, tu się o tym dowiemy
-            if (errorName === "OverconstrainedError") {
-                pokazStatus(`BŁĄD: Telefon nie wspiera ciągłego autofokusa.`, true);
+            if (errorName === "NotAllowedError") {
+                pokazStatus(`BŁĄD: Odmówiono dostępu do kamery. (Sprawdź blokadę w OS)`, true);
+            } else if (errorName === "NotFoundError") {
+                pokazStatus(`BŁĄD: Nie znaleziono tylnej kamery.`, true);
             } else {
-                pokazStatus(`BŁĄD: ${errorName}. Sprawdź uprawnienia.`, true);
+                pokazStatus(`BŁĄD: ${errorName}. Nie można uruchomić kamery.`, true);
             }
         });
     }
