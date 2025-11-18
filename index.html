@@ -48,6 +48,9 @@
     // Musisz znaleźć te wartości w dokumentacji swojego czytnika RFID.
     const RFID_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"; 
     const RFID_CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+    // NOWA WARTOŚĆ: Ta charakterystyka (0002) służy do WYSYŁANIA (WRITE)
+    const RFID_TX_CHARACTERISTIC_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+// --- ⬆⬆⬆ KRYTYCZNA KONFIGURACJA BLUETOOTH ⬆⬆⬆ ---
     // --- ⬆⬆⬆ KRYTYCZNA KONFIGURACJA BLUETOOTH ⬆⬆⬆ ---
 
     // === ZMIENNE GLOBALNE ===
@@ -230,52 +233,60 @@
 
     // === 2. LOGIKA SKANERA BLUETOOTH (RFID) ===
 
-    async function uruchomSkanerBluetooth() {
-        pokazStatus("Szukanie urządzeń Bluetooth...");
-        try {
-            // Krok 1: Poproś użytkownika o wybranie urządzenia
-            btDevice = await navigator.bluetooth.requestDevice({
-                filters: [{ services: [RFID_SERVICE_UUID] }]
-            });
+   async function uruchomSkanerBluetooth() {
+    pokazStatus("Szukanie urządzeń Bluetooth...");
+    try {
+        btDevice = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [RFID_SERVICE_UUID] }]
+        });
 
-            pokazStatus("Podłączanie do urządzenia...");
-            // Krok 2: Podłącz się do serwera GATT
-            const server = await btDevice.gatt.connect();
+        pokazStatus("Podłączanie do urządzenia...");
+        const server = await btDevice.gatt.connect();
 
-            pokazStatus("Pobieranie usługi RFID...");
-            // Krok 3: Pobierz usługę
-            const service = await server.getPrimaryService(RFID_SERVICE_UUID);
+        pokazStatus("Pobieranie usługi RFID...");
+        const service = await server.getPrimaryService(RFID_SERVICE_UUID);
 
-            pokazStatus("Pobieranie charakterystyki RFID...");
-            // Krok 4: Pobierz charakterystykę
-            const characteristic = await service.getCharacteristic(RFID_CHARACTERISTIC_UUID);
+        pokazStatus("Pobieranie charakterystyki ODBIORU (RX)...");
+        // Krok 4a: Pobierz charakterystykę do ODBIERANIA danych (Notify)
+        const rxCharacteristic = await service.getCharacteristic(RFID_RX_CHARACTERISTIC_UUID);
 
-            pokazStatus("Włączanie nasłuchiwania na tagi...");
-            // Krok 5: Włącz powiadomienia
-            await characteristic.startNotifications();
-            
-            // Krok 6: Dodaj "słuchacza" na przychodzące dane
-            characteristic.addEventListener('characteristicvaluechanged', onScanSuccessBluetooth);
-            
-            pokazStatus("Połączono. Oczekuję na tag RFID...");
-            
-            // Obsługa nagłego rozłączenia
-            btDevice.addEventListener('gattserverdisconnected', () => {
-                pokazStatus("Urządzenie rozłączone.", true);
-                btDevice = null;
-                przejdzDoMenu(); // Wróć do menu głównego po rozłączeniu
-            });
+        pokazStatus("Pobieranie charakterystyki WYSYŁANIA (TX)...");
+        // Krok 4b: Pobierz charakterystykę do WYSYŁANIA komend (Write)
+        const txCharacteristic = await service.getCharacteristic(RFID_TX_CHARACTERISTIC_UUID);
 
-        } catch (error) {
-            console.error("Błąd Web Bluetooth:", error);
-            if (error.name === 'NotFoundError') {
-                 pokazStatus("Błąd: Nie znaleziono urządzenia lub anulowano wybór.", true);
-            } else {
-                 pokazStatus(`Błąd: ${error.message}`, true);
-            }
-            przejdzDoMenu(); // Wróć do menu, jeśli wystąpił błąd
+        pokazStatus("Włączanie nasłuchiwania na tagi...");
+        // Krok 5: Włącz powiadomienia na charakterystyce RX
+        await rxCharacteristic.startNotifications();
+        rxCharacteristic.addEventListener('characteristicvaluechanged', onScanSuccessBluetooth);
+
+        // Krok 6: Wyślij komendę "start skanowania" (jeśli jest wymagana)
+        // TO TYLKO PRZYKŁAD! Musisz sprawdzić w dokumentacji czytnika,
+        // jaką komendę wysłać. Może to być np. "SCAN", "READ" albo specjalny bajt.
+
+        // Przykład: Wysłanie tekstu "SCAN"
+        // const command = new TextEncoder().encode("SCAN\n"); // Koduje "SCAN" i znak nowej linii
+        // await txCharacteristic.writeValue(command);
+
+        // Jeśli czytnik nie wymaga komendy, ten krok można pominąć.
+
+        pokazStatus("Połączono. Oczekuję na tag RFID...");
+
+        btDevice.addEventListener('gattserverdisconnected', () => {
+            pokazStatus("Urządzenie rozłączone.", true);
+            btDevice = null;
+            przejdzDoMenu(); 
+        });
+
+    } catch (error) {
+        console.error("Błąd Web Bluetooth:", error);
+        if (error.name === 'NotFoundError') {
+             pokazStatus("Błąd: Nie znaleziono urządzenia lub usługi/charakterystyki.", true);
+        } else {
+             pokazStatus(`Błąd: ${error.message}`, true);
         }
+        przejdzDoMenu(); 
     }
+}
 
     /**
      * Funkcja wywoływana automatycznie, gdy czytnik RFID wyśle dane
